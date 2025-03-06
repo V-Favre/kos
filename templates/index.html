@@ -93,6 +93,28 @@
         .delete-btn:hover {
             background-color: #d32f2f;
         }
+        .edit-btn {
+            position: absolute;
+            top: 10px;
+            right: 50px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .edit-btn:hover {
+            background-color: #0b7dda;
+        }
         .timestamp {
             color: #888;
             font-size: 0.8em;
@@ -177,6 +199,29 @@
             color: #666;
             font-style: italic;
         }
+        .form-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .cancel-edit {
+            background-color: #f44336;
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .cancel-edit:hover {
+            background-color: #d32f2f;
+        }
+        .hidden {
+            display: none;
+        }
         @media (max-width: 768px) {
             .container {
                 flex-direction: column;
@@ -192,8 +237,15 @@
 
     <div class="container">
         <div class="order-form">
-            <h2>Place Your Order</h2>
-            <form action="/order" method="post">
+            <div class="form-header">
+                <h2 id="formTitle">Place Your Order</h2>
+                <a href="/" id="cancelEdit" class="cancel-edit hidden">Cancel Edit</a>
+            </div>
+
+            <form action="/order" method="post" id="orderForm">
+                <!-- Hidden field for order ID when editing -->
+                <input type="hidden" id="order_id" name="order_id" value="">
+
                 <div>
                     <label for="name">Your Name:</label>
                     <input type="text" id="name" name="name" required>
@@ -261,7 +313,7 @@
                     </div>
                 </div>
 
-                <button type="submit">Place Order</button>
+                <button type="submit" id="submitButton">Place Order</button>
             </form>
         </div>
 
@@ -277,6 +329,11 @@
                     <form action="/delete/{{ order.id }}" method="post" onsubmit="return confirm('Are you sure you want to delete this order?');">
                         <button type="submit" class="delete-btn" title="Delete Order">×</button>
                     </form>
+
+                    <form action="/edit/{{ order.id }}" method="post">
+                        <button type="submit" class="edit-btn" title="Edit Order">✎</button>
+                    </form>
+
                     <p><strong>Name:</strong> {{ order.name }}</p>
                     <p><strong>Kebab Type:</strong> {{ order.kebab_type }}</p>
                     <p><strong>Meat:</strong> {{ order.meat }}</p>
@@ -324,10 +381,60 @@
             }
         }
 
+        // Function to fill the form with order data for editing
+        function setupEditMode(order) {
+            if (!order) return;
+
+            // Update form title and button text
+            document.getElementById('formTitle').textContent = 'Edit Your Order';
+            document.getElementById('submitButton').textContent = 'Update Order';
+            document.getElementById('cancelEdit').classList.remove('hidden');
+
+            // Fill in the form fields
+            document.getElementById('order_id').value = order.id;
+            document.getElementById('name').value = order.name;
+            document.getElementById('kebab_type').value = order.kebab_type;
+            document.getElementById('meat').value = order.meat;
+
+            // Handle vegetable options
+            if (order.is_nature) {
+                document.getElementById('nature').checked = true;
+            } else if (order.vegetables.length === {{ vegetable_options|length }}) {
+                document.getElementById('all_veggies_option').checked = true;
+            } else {
+                document.getElementById('custom_veggies').checked = true;
+                // Check the appropriate vegetables
+                order.vegetables.forEach(function(veggie) {
+                    const veggieCheckbox = document.getElementById('veggie_' + veggie);
+                    if (veggieCheckbox) {
+                        veggieCheckbox.checked = true;
+                    }
+                });
+            }
+
+            // Handle veggie options after setting the radio buttons
+            handleVeggieOptions();
+
+            // Check the appropriate sauces
+            order.sauces.forEach(function(sauce) {
+                const sauceCheckbox = document.getElementById('sauce_' + sauce);
+                if (sauceCheckbox) {
+                    sauceCheckbox.checked = true;
+                }
+            });
+
+            // Scroll to the top of the form
+            document.querySelector('.order-form').scrollIntoView({behavior: 'smooth'});
+        }
+
         // Initialize the form when page loads
         document.addEventListener('DOMContentLoaded', function() {
             handleVeggieOptions();
-            console.log("Form initialized");
+
+            // Check if we have an edit order
+            {% if edit_order %}
+                setupEditMode({{ edit_order|tojson }});
+            {% endif %}
         });
     </script>
 </body>

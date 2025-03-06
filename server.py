@@ -1,10 +1,10 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session
 import os
 import sqlite3
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
-# set the port of the flask serveer
+# set the port of the flask server
 app.secret_key = os.urandom(24)
 
 # Database setup
@@ -83,17 +83,59 @@ def get_recent_orders():
     return orders
 
 
+def get_order_by_id(order_id):
+    """Get a specific order by ID"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
+    row = cursor.fetchone()
+
+    if row:
+        order = dict(row)
+
+        # Convert sauces string to list
+        if order['sauces']:
+            order['sauces'] = order['sauces'].split(',')
+        else:
+            order['sauces'] = []
+
+        # Convert vegetables string to list
+        if order['vegetables'] and not order['is_nature']:
+            order['vegetables'] = order['vegetables'].split(',')
+        else:
+            order['vegetables'] = []
+
+        # Convert is_nature to boolean
+        order['is_nature'] = bool(order['is_nature'])
+
+        conn.close()
+        return order
+
+    conn.close()
+    return None
+
+
 @app.route('/')
 def index():
     # Get recent orders from the database
     orders = get_recent_orders()
+
+    # Check if we're in edit mode
+    edit_order = None
+    if 'edit_order_id' in session:
+        edit_order = get_order_by_id(session['edit_order_id'])
+        # Clear the session after retrieving the order
+        session.pop('edit_order_id', None)
 
     return render_template('index.html',
                            kebab_types=kebab_types,
                            meat_options=meat_options,
                            sauce_options=sauce_options,
                            vegetable_options=vegetable_options,
-                           orders=orders)
+                           orders=orders,
+                           edit_order=edit_order)
 
 
 @app.route('/delete/<int:order_id>', methods=['POST'])
@@ -109,6 +151,15 @@ def delete_order(order_id):
     conn.close()
 
     # Redirect back to the main page
+    return redirect(url_for('index'))
+
+
+@app.route('/edit/<int:order_id>', methods=['POST'])
+def edit_order(order_id):
+    # Store the order ID in session for retrieval on the main page
+    session['edit_order_id'] = order_id
+
+    # Redirect back to the main page with the edit_order_id in the session
     return redirect(url_for('index'))
 
 
@@ -140,19 +191,39 @@ def place_order():
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
-        # Insert order into database
-        cursor.execute('''
-        INSERT INTO orders (name, kebab_type, meat, sauces, is_nature, vegetables, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            name,
-            kebab_type,
-            meat,
-            ','.join(sauces) if sauces else '',
-            is_nature,
-            ','.join(vegetables) if vegetables else '',
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ))
+        # Check if this is an update or a new order
+        order_id = request.form.get('order_id', None)
+
+        if order_id:
+            # Update existing order
+            cursor.execute('''
+            UPDATE orders 
+            SET name = ?, kebab_type = ?, meat = ?, sauces = ?, 
+                is_nature = ?, vegetables = ?
+            WHERE id = ?
+            ''', (
+                name,
+                kebab_type,
+                meat,
+                ','.join(sauces) if sauces else '',
+                is_nature,
+                ','.join(vegetables) if vegetables else '',
+                order_id
+            ))
+        else:
+            # Insert new order
+            cursor.execute('''
+            INSERT INTO orders (name, kebab_type, meat, sauces, is_nature, vegetables, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                name,
+                kebab_type,
+                meat,
+                ','.join(sauces) if sauces else '',
+                is_nature,
+                ','.join(vegetables) if vegetables else '',
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ))
 
         conn.commit()
         conn.close()
@@ -262,6 +333,28 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
         .delete-btn:hover {
             background-color: #d32f2f;
         }
+        .edit-btn {
+            position: absolute;
+            top: 10px;
+            right: 50px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .edit-btn:hover {
+            background-color: #0b7dda;
+        }
         .timestamp {
             color: #888;
             font-size: 0.8em;
@@ -346,6 +439,29 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
             color: #666;
             font-style: italic;
         }
+        .form-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .cancel-edit {
+            background-color: #f44336;
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .cancel-edit:hover {
+            background-color: #d32f2f;
+        }
+        .hidden {
+            display: none;
+        }
         @media (max-width: 768px) {
             .container {
                 flex-direction: column;
@@ -361,8 +477,15 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
 
     <div class="container">
         <div class="order-form">
-            <h2>Place Your Order</h2>
-            <form action="/order" method="post">
+            <div class="form-header">
+                <h2 id="formTitle">Place Your Order</h2>
+                <a href="/" id="cancelEdit" class="cancel-edit hidden">Cancel Edit</a>
+            </div>
+
+            <form action="/order" method="post" id="orderForm">
+                <!-- Hidden field for order ID when editing -->
+                <input type="hidden" id="order_id" name="order_id" value="">
+
                 <div>
                     <label for="name">Your Name:</label>
                     <input type="text" id="name" name="name" required>
@@ -430,7 +553,7 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
                     </div>
                 </div>
 
-                <button type="submit">Place Order</button>
+                <button type="submit" id="submitButton">Place Order</button>
             </form>
         </div>
 
@@ -446,6 +569,11 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
                     <form action="/delete/{{ order.id }}" method="post" onsubmit="return confirm('Are you sure you want to delete this order?');">
                         <button type="submit" class="delete-btn" title="Delete Order">×</button>
                     </form>
+
+                    <form action="/edit/{{ order.id }}" method="post">
+                        <button type="submit" class="edit-btn" title="Edit Order">✎</button>
+                    </form>
+
                     <p><strong>Name:</strong> {{ order.name }}</p>
                     <p><strong>Kebab Type:</strong> {{ order.kebab_type }}</p>
                     <p><strong>Meat:</strong> {{ order.meat }}</p>
@@ -493,10 +621,60 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
             }
         }
 
+        // Function to fill the form with order data for editing
+        function setupEditMode(order) {
+            if (!order) return;
+
+            // Update form title and button text
+            document.getElementById('formTitle').textContent = 'Edit Your Order';
+            document.getElementById('submitButton').textContent = 'Update Order';
+            document.getElementById('cancelEdit').classList.remove('hidden');
+
+            // Fill in the form fields
+            document.getElementById('order_id').value = order.id;
+            document.getElementById('name').value = order.name;
+            document.getElementById('kebab_type').value = order.kebab_type;
+            document.getElementById('meat').value = order.meat;
+
+            // Handle vegetable options
+            if (order.is_nature) {
+                document.getElementById('nature').checked = true;
+            } else if (order.vegetables.length === {{ vegetable_options|length }}) {
+                document.getElementById('all_veggies_option').checked = true;
+            } else {
+                document.getElementById('custom_veggies').checked = true;
+                // Check the appropriate vegetables
+                order.vegetables.forEach(function(veggie) {
+                    const veggieCheckbox = document.getElementById('veggie_' + veggie);
+                    if (veggieCheckbox) {
+                        veggieCheckbox.checked = true;
+                    }
+                });
+            }
+
+            // Handle veggie options after setting the radio buttons
+            handleVeggieOptions();
+
+            // Check the appropriate sauces
+            order.sauces.forEach(function(sauce) {
+                const sauceCheckbox = document.getElementById('sauce_' + sauce);
+                if (sauceCheckbox) {
+                    sauceCheckbox.checked = true;
+                }
+            });
+
+            // Scroll to the top of the form
+            document.querySelector('.order-form').scrollIntoView({behavior: 'smooth'});
+        }
+
         // Initialize the form when page loads
         document.addEventListener('DOMContentLoaded', function() {
             handleVeggieOptions();
-            console.log("Form initialized");
+
+            // Check if we have an edit order
+            {% if edit_order %}
+                setupEditMode({{ edit_order|tojson }});
+            {% endif %}
         });
     </script>
 </body>
@@ -505,5 +683,5 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
 
 if __name__ == '__main__':
     print("Kebab Order System is running!")
-    print("Open http://127.0.0.1:41586/ in your browser")
-    app.run(debug=True, host="0.0.0.0", port = 41586)
+    print("Open http://127.0.0.1:55846/ in your browser")
+    app.run(debug=True, host="0.0.0.0", port=41586)
