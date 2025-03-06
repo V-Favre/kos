@@ -482,6 +482,55 @@
                 });
         }
 
+        // Konami Code implementation
+        const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+        let konamiIndex = 0;
+        let konamiActivated = false;
+
+        document.addEventListener('keydown', function(e) {
+            // Check if the key matches the expected key in the Konami sequence
+            if (e.key === konamiCode[konamiIndex]) {
+                konamiIndex++;
+
+                // If we've reached the end of the sequence
+                if (konamiIndex === konamiCode.length) {
+                    konamiActivated = !konamiActivated;
+                    konamiIndex = 0;
+
+                    // Apply the sauce name changes
+                    updateSauceLabels();
+
+                    // Easter egg notification
+                    alert(konamiActivated ? 'Easter Egg Activated! Sauces renamed.' : 'Easter Egg Deactivated! Sauces restored.');
+                }
+            } else {
+                // Reset if the sequence is broken
+                konamiIndex = 0;
+            }
+        });
+
+        // Function to update sauce labels based on Konami code status
+        function updateSauceLabels() {
+            // Get all sauce labels
+            const sauceLabels = document.querySelectorAll('.sauce-option label');
+            const sauceInputs = document.querySelectorAll('.sauce-option input');
+
+            sauceLabels.forEach((label, index) => {
+                const input = sauceInputs[index];
+                const originalValue = input.value;
+
+                if (originalValue === 'Blanche') {
+                    label.textContent = konamiActivated ? 'Planche' : 'Blanche';
+                    // We don't change the value to maintain database consistency
+                } else if (originalValue === 'Cocktail') {
+                    label.textContent = konamiActivated ? 'Coque-tel' : 'Cocktail';
+                }
+            });
+
+            // Also update the summary to reflect the changes
+            refreshSummary();
+        }
+
         // Initialize the form when page loads
         document.addEventListener('DOMContentLoaded', function() {
             handleVeggieOptions();

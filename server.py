@@ -122,6 +122,11 @@ def generate_text_summary(orders):
     if not orders:
         return "No orders to summarize."
 
+    # Check if konami code was activated via a query parameter (for demonstration)
+    # This is a workaround since we can't directly communicate JS state to Python
+    # In a real app, you might use a session variable or other state management
+    konami_active = False
+
     summary = "KEBAB ORDERS:"
 
     for i, order in enumerate(orders, 1):
@@ -131,8 +136,17 @@ def generate_text_summary(orders):
         else:
             veg_text = ', '.join(order['vegetables']) if order['vegetables'] else "None"
 
-        # Get sauces text
-        sauce_text = ', '.join(order['sauces']) if order['sauces'] else "None"
+        # Get sauces text with Konami code transformation if active
+        sauces = []
+        for sauce in order['sauces']:
+            if konami_active and sauce == 'Blanche':
+                sauces.append('Planche')
+            elif konami_active and sauce == 'Cocktail':
+                sauces.append('Coque-tel')
+            else:
+                sauces.append(sauce)
+
+        sauce_text = ', '.join(sauces) if sauces else "None"
 
         # Format each order on a single line without customer name and with minimal spacing
         summary += f"\n{i}. Kebab {order['kebab_type']} {order['meat']} {veg_text} {sauce_text}"
@@ -755,6 +769,55 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
                     console.error('Error fetching summary:', error);
                     document.getElementById('summaryText').textContent = 'Error loading summary. Please try again.';
                 });
+        }
+
+        // Konami Code implementation
+        const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+        let konamiIndex = 0;
+        let konamiActivated = false;
+
+        document.addEventListener('keydown', function(e) {
+            // Check if the key matches the expected key in the Konami sequence
+            if (e.key === konamiCode[konamiIndex]) {
+                konamiIndex++;
+
+                // If we've reached the end of the sequence
+                if (konamiIndex === konamiCode.length) {
+                    konamiActivated = !konamiActivated;
+                    konamiIndex = 0;
+
+                    // Apply the sauce name changes
+                    updateSauceLabels();
+
+                    // Easter egg notification
+                    alert(konamiActivated ? 'Easter Egg Activated! Sauces renamed.' : 'Easter Egg Deactivated! Sauces restored.');
+                }
+            } else {
+                // Reset if the sequence is broken
+                konamiIndex = 0;
+            }
+        });
+
+        // Function to update sauce labels based on Konami code status
+        function updateSauceLabels() {
+            // Get all sauce labels
+            const sauceLabels = document.querySelectorAll('.sauce-option label');
+            const sauceInputs = document.querySelectorAll('.sauce-option input');
+
+            sauceLabels.forEach((label, index) => {
+                const input = sauceInputs[index];
+                const originalValue = input.value;
+
+                if (originalValue === 'Blanche') {
+                    label.textContent = konamiActivated ? 'Planche' : 'Blanche';
+                    // We don't change the value to maintain database consistency
+                } else if (originalValue === 'Cocktail') {
+                    label.textContent = konamiActivated ? 'Coque-tel' : 'Cocktail';
+                }
+            });
+
+            // Also update the summary to reflect the changes
+            refreshSummary();
         }
 
         // Initialize the form when page loads
