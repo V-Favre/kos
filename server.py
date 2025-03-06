@@ -250,11 +250,14 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
             border-radius: 50%;
             width: 30px;
             height: 30px;
-            line-height: 30px;
             text-align: center;
             cursor: pointer;
             font-weight: bold;
             font-size: 16px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .delete-btn:hover {
             background-color: #d32f2f;
@@ -502,5 +505,5 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
 
 if __name__ == '__main__':
     print("Kebab Order System is running!")
-    print("Open http://127.0.0.1:55846/ in your browser")
+    print("Open http://127.0.0.1:41586/ in your browser")
     app.run(debug=True, host="0.0.0.0", port = 41586)
