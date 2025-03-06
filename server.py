@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, Response
 import os
 import sqlite3
 from datetime import datetime, timedelta
@@ -117,6 +117,29 @@ def get_order_by_id(order_id):
     return None
 
 
+def generate_text_summary(orders):
+    """Generate a text summary of orders for phone ordering"""
+    if not orders:
+        return "No orders to summarize."
+
+    summary = "KEBAB ORDERS:"
+
+    for i, order in enumerate(orders, 1):
+        # Get vegetables text
+        if order['is_nature']:
+            veg_text = "Nature"
+        else:
+            veg_text = ', '.join(order['vegetables']) if order['vegetables'] else "None"
+
+        # Get sauces text
+        sauce_text = ', '.join(order['sauces']) if order['sauces'] else "None"
+
+        # Format each order on a single line without customer name and with minimal spacing
+        summary += f"\n{i}. Kebab {order['kebab_type']} {order['meat']} {veg_text} {sauce_text}"
+
+    return summary
+
+
 @app.route('/')
 def index():
     # Get recent orders from the database
@@ -136,6 +159,18 @@ def index():
                            vegetable_options=vegetable_options,
                            orders=orders,
                            edit_order=edit_order)
+
+
+@app.route('/view_text_summary')
+def view_text_summary():
+    # Get recent orders
+    orders = get_recent_orders()
+
+    # Generate the text summary
+    summary = generate_text_summary(orders)
+
+    # Return as plain text for viewing in browser
+    return Response(summary, mimetype="text/plain")
 
 
 @app.route('/delete/<int:order_id>', methods=['POST'])
@@ -462,6 +497,40 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
         .hidden {
             display: none;
         }
+        .summary-container {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            border-left: 4px solid #009688;
+            white-space: pre-line;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.2;
+        }
+        .summary-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .summary-title {
+            font-weight: bold;
+            color: #009688;
+        }
+        .refresh-btn {
+            background-color: #009688;
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            text-decoration: none;
+        }
+        .refresh-btn:hover {
+            background-color: #00796B;
+        }
         @media (max-width: 768px) {
             .container {
                 flex-direction: column;
@@ -561,6 +630,14 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
             <div class="orders-header">
                 <h2>Current Orders</h2>
                 <span class="time-info">Showing orders from the past 4 hours</span>
+            </div>
+
+            <div class="summary-container">
+                <div class="summary-header">
+                    <span class="summary-title">Order Summary for Phone:</span>
+                    <a href="#" onclick="refreshSummary(); return false;" class="refresh-btn">Refresh</a>
+                </div>
+                <div id="summaryText">Loading summary...</div>
             </div>
 
             {% if orders %}
@@ -667,9 +744,25 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
             document.querySelector('.order-form').scrollIntoView({behavior: 'smooth'});
         }
 
+        // Function to fetch and update the text summary
+        function refreshSummary() {
+            fetch('/view_text_summary')
+                .then(response => response.text())
+                .then(text => {
+                    document.getElementById('summaryText').textContent = text;
+                })
+                .catch(error => {
+                    console.error('Error fetching summary:', error);
+                    document.getElementById('summaryText').textContent = 'Error loading summary. Please try again.';
+                });
+        }
+
         // Initialize the form when page loads
         document.addEventListener('DOMContentLoaded', function() {
             handleVeggieOptions();
+
+            // Load the initial summary
+            refreshSummary();
 
             // Check if we have an edit order
             {% if edit_order %}
