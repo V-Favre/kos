@@ -1,0 +1,6 @@
+services:
+  app:
+    image: 16.62.204.31/kos:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
