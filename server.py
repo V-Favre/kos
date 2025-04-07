@@ -947,31 +947,6 @@ with open('templates/spinning_wheel.html', 'w', encoding='utf-8') as f:
             position: relative;
             overflow: hidden;
             box-shadow: 0 0 10px rgba(0,0,0,0.3);
-            transition: transform 0s ease-out;
-            transform: rotate(0deg);
-        }
-        .wheel-section {
-            position: absolute;
-            width: 0;
-            height: 0;
-            transform-origin: center;
-            left: 50%;
-            top: 50%;
-            overflow: hidden;
-        }
-        .section-label {
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            width: 150px;
-            transform-origin: 0 0;
-            text-align: center;
-            padding: 5px;
-            font-weight: bold;
-            font-size: 14px;
-            color: #333;
-            pointer-events: none;
-            text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.7);
         }
         .pointer {
             position: absolute;
@@ -1010,16 +985,53 @@ with open('templates/spinning_wheel.html', 'w', encoding='utf-8') as f:
         }
         .winner-display {
             margin-top: 30px;
-            font-size: 24px;
-            font-weight: bold;
-            height: 36px;
-            color: #4CAF50;
+            padding: 20px;
+            border-radius: 10px;
+            background-color: #fff;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             text-align: center;
             opacity: 0;
-            transition: opacity 0.5s;
+            transition: all 0.5s;
+            transform: scale(0.95);
+            max-width: 500px;
+            width: 100%;
+            border: 3px dashed #FF9800;
         }
         .winner-display.show {
             opacity: 1;
+            transform: scale(1);
+        }
+        .winner-title {
+            font-size: 24px;
+            color: #FF9800;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .winner-name {
+            font-size: 28px;
+            font-weight: bold;
+            color: #E91E63;
+            margin-bottom: 15px;
+        }
+        .winner-message {
+            font-size: 16px;
+            color: #555;
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+        .winner-phone {
+            font-size: 20px;
+            font-weight: bold;
+            color: #673AB7;
+            margin-top: 10px;
+            padding: 5px;
+            border-radius: 5px;
+            background-color: #f3e5f5;
+            display: inline-block;
+        }
+        .winner-emoji {
+            font-size: 30px;
+            margin: 5px;
         }
         .confetti {
             position: fixed;
@@ -1044,6 +1056,20 @@ with open('templates/spinning_wheel.html', 'w', encoding='utf-8') as f:
         .back-button:hover {
             background-color: #0b7dda;
         }
+        .subsections-control {
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .subsections-control label {
+            font-weight: bold;
+        }
+        .subsections-control select {
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
     </style>
 </head>
 <body>
@@ -1053,8 +1079,20 @@ with open('templates/spinning_wheel.html', 'w', encoding='utf-8') as f:
         <div class="wheel-container">
             <div class="pointer"></div>
             <div class="wheel" id="wheel">
-                <!-- Wheel sections will be dynamically generated -->
+                <!-- Wheel will be created with canvas -->
             </div>
+        </div>
+
+        <div class="subsections-control">
+            <label for="subsectionsPerUser">Subsections per user:</label>
+            <select id="subsectionsPerUser">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3" selected>3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+            </select>
+            <button id="updateWheel" style="padding: 5px 10px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">Update Wheel</button>
         </div>
 
         <button id="spinButton" class="spin-button">SPIN THE WHEEL</button>
@@ -1074,87 +1112,166 @@ with open('templates/spinning_wheel.html', 'w', encoding='utf-8') as f:
         const wheel = document.getElementById('wheel');
         const spinButton = document.getElementById('spinButton');
         const winnerDisplay = document.getElementById('winnerDisplay');
-        let isSpinning = false;
+        const subsectionsSelect = document.getElementById('subsectionsPerUser');
+        const updateWheelButton = document.getElementById('updateWheel');
 
-        // Colors for the wheel sections
-        const colors = [
-            '#FF9AA2', '#FFB7B2', '#FFDAC1', '#E2F0CB', 
-            '#B5EAD7', '#C7CEEA', '#F8B195', '#F67280', 
-            '#C06C84', '#6C5B7B', '#355C7D', '#99B898',
-            '#FECEAB', '#FF847C', '#E84A5F', '#A8E6CE'
+        let isSpinning = false;
+        let subsectionsPerUser = 3; // Default to 3 subsections per user
+        let wheelCanvas; // Reference to canvas
+        let currentRotation = 0; // Current rotation angle in degrees
+
+        // Colors for the wheel sections - one color per user (more professional and vibrant palette)
+        const userColors = [
+            '#3498DB', '#2ECC71', '#9B59B6', '#F1C40F', 
+            '#E74C3C', '#1ABC9C', '#34495E', '#F39C12',
+            '#16A085', '#27AE60', '#8E44AD', '#D35400',
+            '#2980B9', '#C0392B', '#7D3C98', '#2574A9'
         ];
 
         // Generate wheel sections with canvas
         function generateWheel() {
             wheel.innerHTML = '';
 
-            const numNames = customerNames.length;
-            const anglePerSegment = (2 * Math.PI) / numNames;
+            const numUsers = customerNames.length;
+            const totalSegments = numUsers * subsectionsPerUser;
+            const anglePerSegment = (2 * Math.PI) / totalSegments;
             const radius = 200; // Radius of the wheel (400px/2)
 
-            // Create pie segments with canvas
-            const canvas = document.createElement('canvas');
-            canvas.width = 400;
-            canvas.height = 400;
-            wheel.appendChild(canvas);
+            // Create canvas for the wheel
+            wheelCanvas = document.createElement('canvas');
+            wheelCanvas.width = 400;
+            wheelCanvas.height = 400;
+            wheel.appendChild(wheelCanvas);
 
-            const ctx = canvas.getContext('2d');
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
+            // Apply current rotation
+            wheel.style.transform = `rotate(${currentRotation}deg)`;
 
-            // Draw wheel segments
-            for (let i = 0; i < numNames; i++) {
-                const startAngle = i * anglePerSegment;
-                const endAngle = (i + 1) * anglePerSegment;
+            const ctx = wheelCanvas.getContext('2d');
+            const centerX = wheelCanvas.width / 2;
+            const centerY = wheelCanvas.height / 2;
 
-                // Draw pie segment
-                ctx.beginPath();
-                ctx.moveTo(centerX, centerY);
-                ctx.arc(centerX, centerY, radius, startAngle, endAngle);
-                ctx.closePath();
+            // For each user, create their subsections
+            for (let userIndex = 0; userIndex < numUsers; userIndex++) {
+                const userName = customerNames[userIndex];
+                const userColor = userColors[userIndex % userColors.length];
 
-                // Fill with color
-                ctx.fillStyle = colors[i % colors.length];
-                ctx.fill();
+                // Create subsections for this user
+                for (let subIndex = 0; subIndex < subsectionsPerUser; subIndex++) {
+                    // Calculate the segment index in the wheel
+                    // We want to distribute user subsections evenly around the wheel
+                    // instead of grouping them together
+                    const segmentIndex = (subIndex * numUsers) + userIndex;
+                    const startAngle = segmentIndex * anglePerSegment;
+                    const endAngle = startAngle + anglePerSegment;
 
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-                ctx.stroke();
+                    // Draw pie segment
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY);
+                    ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                    ctx.closePath();
 
-                // Add name label
-                const middleAngle = startAngle + (anglePerSegment / 2);
-                const labelX = centerX + Math.cos(middleAngle) * (radius * 0.65);
-                const labelY = centerY + Math.sin(middleAngle) * (radius * 0.65);
+                    // Fill with user's color (same for all subsections)
+                    ctx.fillStyle = userColor;
+                    ctx.fill();
 
-                // Save context state
-                ctx.save();
+                    // Add border
+                    ctx.lineWidth = 1.5;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                    ctx.stroke();
 
-                // Position text
-                ctx.translate(labelX, labelY);
-                ctx.rotate(middleAngle + Math.PI/2);
+                    // Add name label to EVERY subsection
+                    const middleAngle = startAngle + (anglePerSegment / 2);
+                    const labelDistance = radius * 0.7; // Place text at 70% of radius
 
-                // Draw text
-                ctx.textAlign = 'center';
-                ctx.fillStyle = '#333';
-                ctx.font = 'bold 14px Arial';
+                    const labelX = centerX + Math.cos(middleAngle) * labelDistance;
+                    const labelY = centerY + Math.sin(middleAngle) * labelDistance;
 
-                // Measure text to ensure it fits
-                const name = customerNames[i];
-                const maxWidth = radius * 0.5;
-                let fontSize = 14;
+                    // Save context state
+                    ctx.save();
 
-                // Reduce font size if needed
-                if (ctx.measureText(name).width > maxWidth) {
-                    while (ctx.measureText(name).width > maxWidth && fontSize > 8) {
-                        fontSize--;
-                        ctx.font = `bold ${fontSize}px Arial`;
-                    }
+                    // Position and rotate text
+                    ctx.translate(labelX, labelY);
+                    ctx.rotate(middleAngle + Math.PI/2);
+
+                    // Draw text
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = '#333';
+                    ctx.font = 'bold 12px Arial';
+
+                    // Add a white text shadow for better readability
+                    ctx.shadowColor = 'white';
+                    ctx.shadowBlur = 3;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+
+                    // Make sure text fits in the segment
+                    const maxTextWidth = radius * 0.4;
+                    ctx.fillText(userName, 0, 0, maxTextWidth);
+
+                    // Restore context
+                    ctx.restore();
                 }
+            }
+        }
 
-                ctx.fillText(name, 0, 0, maxWidth);
+        // Animate the wheel using requestAnimationFrame for smoother performance
+        function animateWheel(startTime, duration, startAngle, targetAngle) {
+            const now = performance.now();
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
 
-                // Restore context
-                ctx.restore();
+            // Easing function - slow down towards the end
+            const easeOut = function(t) {
+                return 1 - Math.pow(1 - t, 3);
+            };
+
+            // Calculate current angle
+            const easedProgress = easeOut(progress);
+            const currentAngle = startAngle + (targetAngle - startAngle) * easedProgress;
+
+            // Apply rotation
+            wheel.style.transform = `rotate(${currentAngle}deg)`;
+
+            // Continue animation if not complete
+            if (progress < 1) {
+                requestAnimationFrame(() => animateWheel(startTime, duration, startAngle, targetAngle));
+            } else {
+                // Animation complete
+                currentRotation = currentAngle % 360; // Store the current rotation (0-359)
+
+                // Calculate which user will be the winner
+                const numUsers = customerNames.length;
+                const totalSegments = numUsers * subsectionsPerUser;
+                const degreesPerSegment = 360 / totalSegments;
+
+                // The wheel rotates clockwise, but the actual position is counterclockwise from the starting point
+                const finalPosition = currentRotation;
+
+                // The pointer is at top (0 degrees), so we need to determine which segment that points to
+                // Since the wheel rotates clockwise, we need to convert to the correct index
+                const segmentIndex = Math.floor(((360 - finalPosition) % 360) / degreesPerSegment) % totalSegments;
+
+                // Convert segment index to user index
+                const userIndex = segmentIndex % numUsers;
+
+                // Show winner with fun display
+                const winner = customerNames[userIndex];
+                winnerDisplay.innerHTML = `
+                    <div class="winner-emoji">🎉 🌯 🎊</div>
+                    <div class="winner-title">JACKPOT!</div>
+                    <div class="winner-name">${winner}</div>
+                    <div class="winner-message">Tu dois appeler le meilleur kebab de la région!</div>
+                    <div class="winner-phone">+41 22 341 35 90</div>
+                    <div class="winner-emoji">🍗 🥙 🔥</div>
+                `;
+                winnerDisplay.classList.add('show');
+                createConfetti();
+
+                // Re-enable spin button
+                setTimeout(() => {
+                    isSpinning = false;
+                    spinButton.disabled = false;
+                }, 1000);
             }
         }
 
@@ -1166,50 +1283,25 @@ with open('templates/spinning_wheel.html', 'w', encoding='utf-8') as f:
             spinButton.disabled = true;
             winnerDisplay.classList.remove('show');
 
-            // Random number of rotations (between 2 and 5 full rotations)
-            const rotations = 5 + Math.random() * 5;
+            // Start angle is the current rotation
+            const startAngle = currentRotation;
 
-            // Random position for stopping (in degrees, between 0-359)
-            const random360 = Math.floor(Math.random() * 360);
+            // Calculate target angle - at least 5 full rotations + random extra
+            const minRotations = 5;
+            const randomExtraRotations = 2 + Math.random() * 3;
+            const totalRotations = minRotations + randomExtraRotations;
 
-            // Calculate total rotation
-            const totalDegrees = (rotations * 360) + random360;
+            // Random final position (0-359 degrees)
+            const randomFinalPosition = Math.floor(Math.random() * 360);
 
-            // Random duration between 3 and 7 seconds
-            const duration = 5 + Math.random() * 5;
+            // Calculate the total target angle
+            const targetAngle = startAngle + (totalRotations * 360) + randomFinalPosition;
 
-            // Apply the transition and rotation
-            wheel.style.transition = `transform ${duration}s cubic-bezier(0.17, 0.67, 0.21, 0.99)`;
-            wheel.style.transform = `rotate(${totalDegrees}deg)`;
+            // Animation duration between 4 and 7 seconds
+            const duration = 4000 + Math.random() * 3000;
 
-            // Calculate which name will be the winner
-            // We need to determine which section is at the pointer when wheel stops
-            const numNames = customerNames.length;
-            const degreesPerSection = 360 / numNames;
-
-            // The wheel rotates clockwise, but the actual position is counterclockwise from the starting point
-            // So we need to calculate it relative to our rotation
-
-            // We need the ending position modulo 360 to get final position
-            const finalPosition = totalDegrees % 360;
-
-            // The pointer is at top (0 degrees), so we need to determine which section that points to
-            // Since the wheel rotates clockwise, we need to convert to the correct index
-            // We add numNames and take modulo again to ensure positive value
-            const winnerIndex = Math.floor(((360 - finalPosition) % 360) / degreesPerSection) % numNames;
-
-            // After rotation completes
-            setTimeout(() => {
-                const winner = customerNames[winnerIndex];
-                winnerDisplay.textContent = `Winner: ${winner}`;
-                winnerDisplay.classList.add('show');
-                createConfetti();
-
-                setTimeout(() => {
-                    isSpinning = false;
-                    spinButton.disabled = false;
-                }, 1000);
-            }, duration * 1000 + 500); // Add a small buffer after the transition ends
+            // Start the animation
+            animateWheel(performance.now(), duration, startAngle, targetAngle);
         }
 
         // Create confetti effect
@@ -1277,9 +1369,19 @@ with open('templates/spinning_wheel.html', 'w', encoding='utf-8') as f:
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
+            // Set default subsections
+            subsectionsSelect.value = subsectionsPerUser.toString();
+
+            // Generate initial wheel
             generateWheel();
 
+            // Event listeners
             spinButton.addEventListener('click', spinWheel);
+
+            updateWheelButton.addEventListener('click', function() {
+                subsectionsPerUser = parseInt(subsectionsSelect.value);
+                generateWheel();
+            });
         });
     </script>
 </body>
