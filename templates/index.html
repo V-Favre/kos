@@ -264,6 +264,26 @@
                 margin: 10px 0;
             }
         }
+        .spinning-wheel-link {
+            margin: 15px 0;
+            text-align: center;
+        }
+        .wheel-link-btn {
+            background-color: #ff9800;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            display: inline-block;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .wheel-link-btn:hover {
+            background-color: #f57c00;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
     </style>
 </head>
 <body>
@@ -363,6 +383,11 @@
                     <a href="#" onclick="refreshSummary(); return false;" class="refresh-btn">Refresh</a>
                 </div>
                 <div id="summaryText">Loading summary...</div>
+            </div>
+            <div class="spinning-wheel-link">
+                <a href="/spinning_wheel" class="wheel-link-btn">
+                    <span style="margin-right: 5px;">🎡</span> Spin the Wheel
+                </a>
             </div>
 
             {% if orders %}

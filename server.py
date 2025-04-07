@@ -575,6 +575,26 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
                 margin: 10px 0;
             }
         }
+        .spinning-wheel-link {
+            margin: 15px 0;
+            text-align: center;
+        }
+        .wheel-link-btn {
+            background-color: #ff9800;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            display: inline-block;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .wheel-link-btn:hover {
+            background-color: #f57c00;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
     </style>
 </head>
 <body>
@@ -674,6 +694,11 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
                     <a href="#" onclick="refreshSummary(); return false;" class="refresh-btn">Refresh</a>
                 </div>
                 <div id="summaryText">Loading summary...</div>
+            </div>
+            <div class="spinning-wheel-link">
+                <a href="/spinning_wheel" class="wheel-link-btn">
+                    <span style="margin-right: 5px;">🎡</span> Spin the Wheel
+                </a>
             </div>
 
             {% if orders %}
@@ -853,6 +878,408 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
             {% if edit_order %}
                 setupEditMode({{ edit_order|tojson }});
             {% endif %}
+        });
+    </script>
+</body>
+</html>
+    ''')
+
+
+@app.route('/spinning_wheel')
+def spinning_wheel():
+    """Show a spinning wheel to randomly select a customer from orders"""
+    # Get recent orders from the database
+    orders = get_recent_orders()
+
+    # Extract unique customer names
+    customer_names = []
+    for order in orders:
+        if order['name'] not in customer_names and order['name'] != 'Anonymous':
+            customer_names.append(order['name'])
+
+    # If no names, add a placeholder
+    if not customer_names:
+        customer_names = ['No customers found']
+
+    return render_template('spinning_wheel.html', customer_names=customer_names)
+
+
+# Create a new template file for the spinning wheel
+with open('templates/spinning_wheel.html', 'w', encoding='utf-8') as f:
+    f.write('''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kebab Order - Random Customer Selector</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1, h2 {
+            color: #333;
+            text-align: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+        .wheel-container {
+            position: relative;
+            width: 400px;
+            height: 400px;
+            margin: 20px auto;
+        }
+        .wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            transition: transform 0s ease-out;
+            transform: rotate(0deg);
+        }
+        .wheel-section {
+            position: absolute;
+            width: 0;
+            height: 0;
+            transform-origin: center;
+            left: 50%;
+            top: 50%;
+            overflow: hidden;
+        }
+        .section-label {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 150px;
+            transform-origin: 0 0;
+            text-align: center;
+            padding: 5px;
+            font-weight: bold;
+            font-size: 14px;
+            color: #333;
+            pointer-events: none;
+            text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.7);
+        }
+        .pointer {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 40px solid #d32f2f;
+            z-index: 10;
+        }
+        .spin-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+        .spin-button:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0,0,0,0.15);
+        }
+        .spin-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .winner-display {
+            margin-top: 30px;
+            font-size: 24px;
+            font-weight: bold;
+            height: 36px;
+            color: #4CAF50;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        .winner-display.show {
+            opacity: 1;
+        }
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background-color: #f00;
+            pointer-events: none;
+            opacity: 0;
+        }
+        .back-button {
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 20px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-button:hover {
+            background-color: #0b7dda;
+        }
+    </style>
+</head>
+<body>
+    <h1>Kebab Order Random Selector</h1>
+
+    <div class="container">
+        <div class="wheel-container">
+            <div class="pointer"></div>
+            <div class="wheel" id="wheel">
+                <!-- Wheel sections will be dynamically generated -->
+            </div>
+        </div>
+
+        <button id="spinButton" class="spin-button">SPIN THE WHEEL</button>
+
+        <div id="winnerDisplay" class="winner-display">
+            <!-- Winner will be displayed here -->
+        </div>
+
+        <a href="/" class="back-button">Back to Orders</a>
+    </div>
+
+    <script>
+        // Customer names from server
+        const customerNames = {{ customer_names|tojson }};
+
+        // Wheel configuration
+        const wheel = document.getElementById('wheel');
+        const spinButton = document.getElementById('spinButton');
+        const winnerDisplay = document.getElementById('winnerDisplay');
+        let isSpinning = false;
+
+        // Colors for the wheel sections
+        const colors = [
+            '#FF9AA2', '#FFB7B2', '#FFDAC1', '#E2F0CB', 
+            '#B5EAD7', '#C7CEEA', '#F8B195', '#F67280', 
+            '#C06C84', '#6C5B7B', '#355C7D', '#99B898',
+            '#FECEAB', '#FF847C', '#E84A5F', '#A8E6CE'
+        ];
+
+        // Generate wheel sections with canvas
+        function generateWheel() {
+            wheel.innerHTML = '';
+
+            const numNames = customerNames.length;
+            const anglePerSegment = (2 * Math.PI) / numNames;
+            const radius = 200; // Radius of the wheel (400px/2)
+
+            // Create pie segments with canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = 400;
+            canvas.height = 400;
+            wheel.appendChild(canvas);
+
+            const ctx = canvas.getContext('2d');
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            // Draw wheel segments
+            for (let i = 0; i < numNames; i++) {
+                const startAngle = i * anglePerSegment;
+                const endAngle = (i + 1) * anglePerSegment;
+
+                // Draw pie segment
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                ctx.closePath();
+
+                // Fill with color
+                ctx.fillStyle = colors[i % colors.length];
+                ctx.fill();
+
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.stroke();
+
+                // Add name label
+                const middleAngle = startAngle + (anglePerSegment / 2);
+                const labelX = centerX + Math.cos(middleAngle) * (radius * 0.65);
+                const labelY = centerY + Math.sin(middleAngle) * (radius * 0.65);
+
+                // Save context state
+                ctx.save();
+
+                // Position text
+                ctx.translate(labelX, labelY);
+                ctx.rotate(middleAngle + Math.PI/2);
+
+                // Draw text
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 14px Arial';
+
+                // Measure text to ensure it fits
+                const name = customerNames[i];
+                const maxWidth = radius * 0.5;
+                let fontSize = 14;
+
+                // Reduce font size if needed
+                if (ctx.measureText(name).width > maxWidth) {
+                    while (ctx.measureText(name).width > maxWidth && fontSize > 8) {
+                        fontSize--;
+                        ctx.font = `bold ${fontSize}px Arial`;
+                    }
+                }
+
+                ctx.fillText(name, 0, 0, maxWidth);
+
+                // Restore context
+                ctx.restore();
+            }
+        }
+
+        // Spin the wheel
+        function spinWheel() {
+            if (isSpinning) return;
+
+            isSpinning = true;
+            spinButton.disabled = true;
+            winnerDisplay.classList.remove('show');
+
+            // Random number of rotations (between 2 and 5 full rotations)
+            const rotations = 5 + Math.random() * 5;
+
+            // Random position for stopping (in degrees, between 0-359)
+            const random360 = Math.floor(Math.random() * 360);
+
+            // Calculate total rotation
+            const totalDegrees = (rotations * 360) + random360;
+
+            // Random duration between 3 and 7 seconds
+            const duration = 5 + Math.random() * 5;
+
+            // Apply the transition and rotation
+            wheel.style.transition = `transform ${duration}s cubic-bezier(0.17, 0.67, 0.21, 0.99)`;
+            wheel.style.transform = `rotate(${totalDegrees}deg)`;
+
+            // Calculate which name will be the winner
+            // We need to determine which section is at the pointer when wheel stops
+            const numNames = customerNames.length;
+            const degreesPerSection = 360 / numNames;
+
+            // The wheel rotates clockwise, but the actual position is counterclockwise from the starting point
+            // So we need to calculate it relative to our rotation
+
+            // We need the ending position modulo 360 to get final position
+            const finalPosition = totalDegrees % 360;
+
+            // The pointer is at top (0 degrees), so we need to determine which section that points to
+            // Since the wheel rotates clockwise, we need to convert to the correct index
+            // We add numNames and take modulo again to ensure positive value
+            const winnerIndex = Math.floor(((360 - finalPosition) % 360) / degreesPerSection) % numNames;
+
+            // After rotation completes
+            setTimeout(() => {
+                const winner = customerNames[winnerIndex];
+                winnerDisplay.textContent = `Winner: ${winner}`;
+                winnerDisplay.classList.add('show');
+                createConfetti();
+
+                setTimeout(() => {
+                    isSpinning = false;
+                    spinButton.disabled = false;
+                }, 1000);
+            }, duration * 1000 + 500); // Add a small buffer after the transition ends
+        }
+
+        // Create confetti effect
+        function createConfetti() {
+            const confettiColors = ['#f00', '#0f0', '#00f', '#ff0', '#f0f', '#0ff'];
+            const confettiCount = 150;
+
+            for (let i = 0; i < confettiCount; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+
+                // Random position
+                const startX = Math.random() * window.innerWidth;
+                const startY = -20;
+
+                // Random color
+                const color = confettiColors[Math.floor(Math.random() * confettiColors.length)];
+
+                // Set styles
+                confetti.style.left = `${startX}px`;
+                confetti.style.top = `${startY}px`;
+                confetti.style.backgroundColor = color;
+                confetti.style.opacity = '1';
+
+                // Randomize size and shape
+                const size = 5 + Math.random() * 10;
+                confetti.style.width = `${size}px`;
+                confetti.style.height = `${size}px`;
+
+                // Occasionally make rectangle confetti
+                if (Math.random() > 0.5) {
+                    confetti.style.width = `${size * 0.5}px`;
+                    confetti.style.height = `${size * 1.5}px`;
+                }
+
+                // Occasionally make round confetti
+                if (Math.random() > 0.7) {
+                    confetti.style.borderRadius = '50%';
+                }
+
+                // Add to body
+                document.body.appendChild(confetti);
+
+                // Animate falling
+                const animationDuration = 2 + Math.random() * 4;
+                const fallDistance = window.innerHeight + 100;
+                const horizontalSwing = (Math.random() - 0.5) * 300;
+
+                confetti.animate([
+                    { transform: 'translate(0px, 0px) rotate(0deg)' },
+                    { transform: `translate(${horizontalSwing}px, ${fallDistance}px) rotate(${Math.random() * 720}deg)` }
+                ], {
+                    duration: animationDuration * 1000,
+                    easing: 'cubic-bezier(0.4, 0.0, 0.2, 1)'
+                });
+
+                // Remove after animation
+                setTimeout(() => {
+                    if (document.body.contains(confetti)) {
+                        document.body.removeChild(confetti);
+                    }
+                }, animationDuration * 1000);
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            generateWheel();
+
+            spinButton.addEventListener('click', spinWheel);
         });
     </script>
 </body>
