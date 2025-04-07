@@ -127,9 +127,12 @@ def generate_text_summary(orders):
     # In a real app, you might use a session variable or other state management
     konami_active = False
 
-    summary = "KEBAB ORDERS:"
+    # Create a dictionary to count identical orders
+    order_counts = {}
+    total_kebabs = 0
 
-    for i, order in enumerate(orders, 1):
+    # First, collect all orders in a format that can be counted
+    for order in orders:
         # Get vegetables text
         if order['is_nature']:
             veg_text = "Nature"
@@ -148,8 +151,27 @@ def generate_text_summary(orders):
 
         sauce_text = ', '.join(sauces) if sauces else "None"
 
-        # Format each order on a single line without customer name and with minimal spacing
-        summary += f"\n{i}. Kebab {order['kebab_type']} {order['meat']} {veg_text} {sauce_text}"
+        # Create a unique key for this order configuration
+        order_key = f"Kebab {order['kebab_type']} {order['meat']} {veg_text} {sauce_text}"
+
+        # Increment the count for this order configuration
+        if order_key in order_counts:
+            order_counts[order_key] += 1
+        else:
+            order_counts[order_key] = 1
+
+        total_kebabs += 1
+
+    # Generate the header with total count
+    summary = f"KEBAB ORDERS: (TOTAL: {total_kebabs})"
+
+    # Now generate the summary with counts
+    for order_key, count in order_counts.items():
+        # If there's more than one identical order, add the count at the beginning
+        if count > 1:
+            summary += f"\n*{count} {order_key}"
+        else:
+            summary += f"\n{order_key}"
 
     return summary
 
@@ -839,5 +861,5 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
 
 if __name__ == '__main__':
     print("Kebab Order System is running!")
-    print("Open http://127.0.0.1:55846/ in your browser")
+    print("Open http://127.0.0.1:41586/ in your browser")
     app.run(debug=True, host="0.0.0.0", port=41586)
